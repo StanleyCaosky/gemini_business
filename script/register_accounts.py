@@ -349,7 +349,7 @@ def main():
     print(f"\n{'='*50}")
     print(f"Gemini Business 批量注册 - 目标 {TOTAL_ACCOUNTS} 个")
     print(f"模式: 无限重试直到成功")
-    print(f"输出目录: {OUTPUT_DIR}")
+    print(f"输出文件: {ACCOUNTS_FILE}")
     print(f"{'='*50}\n")
 
     driver = create_chrome_driver()
