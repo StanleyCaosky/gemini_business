@@ -23,8 +23,8 @@ services:
       # 邮箱 API 配置
       - MAIL_API=https://mail.chatgpt.org.uk
       - MAIL_KEY=gpt-test
-      # 输出目录（容器内路径）
-      - OUTPUT_DIR=/app/data/accounts
+      # 账号文件（容器内路径）
+      - ACCOUNTS_FILE=/app/data/accounts.json
     command: ["python", "-u", "script/register_accounts.py"]
     profiles:
       - register
@@ -39,8 +39,8 @@ services:
       - MIN_ACCOUNTS=5
       # 检测间隔（秒）
       - CHECK_INTERVAL=3600
-      # 账号目录
-      - ACCOUNTS_DIR=/app/data/accounts
+      # 账号文件
+      - ACCOUNTS_FILE=/app/data/accounts.json
       # 邮箱 API 配置（用于注册新账号）
       - MAIL_API=https://mail.chatgpt.org.uk
       - MAIL_KEY=gpt-test

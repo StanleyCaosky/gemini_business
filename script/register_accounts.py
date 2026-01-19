@@ -43,7 +43,7 @@ sys.path.insert(0, PROJECT_ROOT)
 TOTAL_ACCOUNTS = int(os.environ.get("TOTAL_ACCOUNTS", 1))
 MAIL_API = os.environ.get("MAIL_API", "https://mail.chatgpt.org.uk")
 MAIL_KEY = os.environ.get("MAIL_KEY", "gpt-test")
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "data", "accounts"))
+ACCOUNTS_FILE = os.environ.get("ACCOUNTS_FILE", os.path.join(PROJECT_ROOT, "data", "accounts.json"))
 LOGIN_URL = "https://auth.business.gemini.google/login?continueUrl=https:%2F%2Fbusiness.gemini.google%2F&wiffid=CAoSJDIwNTlhYzBjLTVlMmMtNGUxZC1hY2JkLThmOGY2ZDE0ODM1Mg"
 
 # XPath
@@ -123,10 +123,26 @@ def get_code(email, timeout=30):
     return None
 
 
-def save_config(email, driver, timeout=15):
-    """保存配置，带轮询等待所有字段"""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+def load_accounts():
+    """加载现有账号列表"""
+    if os.path.exists(ACCOUNTS_FILE):
+        try:
+            with open(ACCOUNTS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return []
 
+
+def save_accounts(accounts):
+    """保存账号列表到文件"""
+    os.makedirs(os.path.dirname(ACCOUNTS_FILE), exist_ok=True)
+    with open(ACCOUNTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(accounts, f, indent=2, ensure_ascii=False)
+
+
+def save_config(email, driver, timeout=15):
+    """保存配置到 accounts.json，追加模式"""
     log(f"等待配置数据 (最多{timeout}s)...")
     start = time.time()
     data = None
@@ -198,24 +214,28 @@ def save_config(email, driver, timeout=15):
         log(f"配置不完整，缺失字段: {', '.join(missing)}，跳过: {email}", "WARN")
         return None
 
-    file_path = os.path.join(OUTPUT_DIR, f"{email}.json")
-    with open(file_path, 'w') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    log(f"已保存: {file_path}")
+    # 追加到 accounts.json
+    accounts = load_accounts()
+    # 检查是否已存在
+    accounts = [a for a in accounts if a.get('id') != email]
+    accounts.append(data)
+    save_accounts(accounts)
+    log(f"已保存到: {ACCOUNTS_FILE} (共 {len(accounts)} 个账号)")
     return data
 
 
 def delete_local_file(email):
-    """删除本地账号文件（仅用于失败情况）"""
+    """从 accounts.json 删除账号（仅用于失败情况）"""
     if not email:
         return
-    file_path = os.path.join(OUTPUT_DIR, f"{email}.json")
     try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            log(f"已删除失败账号文件: {email}.json")
+        accounts = load_accounts()
+        new_accounts = [a for a in accounts if a.get('id') != email]
+        if len(new_accounts) < len(accounts):
+            save_accounts(new_accounts)
+            log(f"已从配置中删除: {email}")
     except Exception as e:
-        log(f"删除文件失败: {email}.json - {e}", "WARN")
+        log(f"删除账号失败: {email} - {e}", "WARN")
 
 
 def register(driver):

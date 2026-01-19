@@ -35,7 +35,7 @@ sys.path.insert(0, PROJECT_ROOT)
 # ========== 配置 ==========
 MIN_ACCOUNTS = int(os.environ.get("MIN_ACCOUNTS", 5))
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", 3600))
-ACCOUNTS_DIR = os.environ.get("ACCOUNTS_DIR", os.path.join(PROJECT_ROOT, "data", "accounts"))
+ACCOUNTS_FILE = os.environ.get("ACCOUNTS_FILE", os.path.join(PROJECT_ROOT, "data", "accounts.json"))
 
 # Gemini Business API 测试 URL
 GEMINI_API_URL = "https://business.gemini.google/v1beta/models"
@@ -46,20 +46,22 @@ def log(msg: str, level: str = "INFO"):
 
 
 def load_accounts() -> List[Dict]:
-    """加载所有账号配置"""
-    accounts = []
-    os.makedirs(ACCOUNTS_DIR, exist_ok=True)
-    
-    for file_path in glob.glob(os.path.join(ACCOUNTS_DIR, "*.json")):
+    """从 accounts.json 加载账号配置"""
+    if os.path.exists(ACCOUNTS_FILE):
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                account = json.load(f)
-                account['_file_path'] = file_path
-                accounts.append(account)
+            with open(ACCOUNTS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
         except Exception as e:
-            log(f"加载账号失败 {file_path}: {e}", "ERR")
-    
-    return accounts
+            log(f"加载账号失败: {e}", "ERR")
+    return []
+
+
+def save_accounts(accounts: List[Dict]):
+    """保存账号列表到 accounts.json"""
+    os.makedirs(os.path.dirname(ACCOUNTS_FILE), exist_ok=True)
+    with open(ACCOUNTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(accounts, f, indent=2, ensure_ascii=False)
+    log(f"配置已保存: {ACCOUNTS_FILE}")
 
 
 def check_account(account: Dict) -> bool:
@@ -103,15 +105,12 @@ def check_account(account: Dict) -> bool:
         return True
 
 
-def delete_account(account: Dict):
-    """删除账号配置文件"""
-    file_path = account.get('_file_path')
-    if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-            log(f"已删除失效账号: {account.get('id')}")
-        except Exception as e:
-            log(f"删除账号失败 {account.get('id')}: {e}", "ERR")
+def delete_account(account_id: str, accounts: List[Dict]) -> List[Dict]:
+    """从账号列表中删除指定账号"""
+    new_accounts = [a for a in accounts if a.get('id') != account_id]
+    if len(new_accounts) < len(accounts):
+        log(f"已删除失效账号: {account_id}")
+    return new_accounts
 
 
 def register_accounts(count: int):
@@ -125,7 +124,7 @@ def register_accounts(count: int):
         # 调用注册脚本
         env = os.environ.copy()
         env["TOTAL_ACCOUNTS"] = str(count)
-        env["OUTPUT_DIR"] = ACCOUNTS_DIR
+        env["ACCOUNTS_FILE"] = ACCOUNTS_FILE
         
         register_script = os.path.join(SCRIPT_DIR, "register_accounts.py")
         
@@ -166,6 +165,7 @@ def check_and_maintain():
     
     # 检测每个账号
     valid_accounts = []
+    invalid_ids = []
     for account in accounts:
         account_id = account.get('id', 'unknown')
         log(f"检测账号: {account_id}")
@@ -174,8 +174,14 @@ def check_and_maintain():
             valid_accounts.append(account)
             log(f"  ✓ 有效")
         else:
-            delete_account(account)
-            log(f"  ✗ 已删除")
+            invalid_ids.append(account_id)
+            log(f"  ✗ 失效")
+    
+    # 删除失效账号并保存
+    if invalid_ids:
+        for account_id in invalid_ids:
+            accounts = delete_account(account_id, accounts)
+        save_accounts(accounts)
     
     valid_count = len(valid_accounts)
     log(f"有效账号数: {valid_count}/{MIN_ACCOUNTS}")
@@ -197,7 +203,7 @@ def main():
     log("Gemini Business 账号守护服务启动")
     log(f"最少账号数: {MIN_ACCOUNTS}")
     log(f"检测间隔: {CHECK_INTERVAL} 秒")
-    log(f"账号目录: {ACCOUNTS_DIR}")
+    log(f"账号文件: {ACCOUNTS_FILE}")
     log("=" * 50)
     
     while True:
