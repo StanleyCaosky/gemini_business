@@ -332,85 +332,78 @@ def register(driver):
     return email, False, None
 
 
-def register_worker(worker_id):
-    """单个注册工作线程"""
-    global success_count
-    driver = None
-    
-    while True:
-        with success_lock:
-            if success_count >= TOTAL_ACCOUNTS:
-                break
-            current_target = success_count + 1
-        
-        log(f"[Worker-{worker_id}] 开始注册第 {current_target}/{TOTAL_ACCOUNTS} 个账号")
-        
-        try:
-            if driver is None:
+def main():
+    print(f"\n{'='*50}")
+    print(f"Gemini Business 批量注册 - 目标 {TOTAL_ACCOUNTS} 个")
+    print(f"模式: 无限重试直到成功")
+    print(f"输出目录: {OUTPUT_DIR}")
+    print(f"{'='*50}\n")
+
+    driver = create_chrome_driver()
+    success = 0
+    total_attempts = 0
+
+    while success < TOTAL_ACCOUNTS:
+        attempt_for_current = 0
+
+        while True:  # 无限重试直到成功
+            total_attempts += 1
+            attempt_for_current += 1
+
+            print(f"\n{'#'*40}")
+            print(f"注册第 {success + 1}/{TOTAL_ACCOUNTS} 个账号 (第 {attempt_for_current} 次尝试)")
+            print(f"{'#'*40}\n")
+
+            try:
+                driver.current_url  # 检查driver是否有效
+            except:
                 driver = create_chrome_driver()
-            
-            email, ok, cfg = register(driver)
-            
-            if ok and cfg:
-                with success_lock:
-                    if success_count < TOTAL_ACCOUNTS:
-                        success_count += 1
-                        log(f"[Worker-{worker_id}] ✓ 注册成功: {email} ({success_count}/{TOTAL_ACCOUNTS})")
-                    else:
-                        delete_local_file(email)
-                        log(f"[Worker-{worker_id}] 已达目标，丢弃: {email}")
-            else:
+
+            email = None
+            try:
+                email, ok, cfg = register(driver)
+                if ok and cfg:
+                    success += 1
+                    log(f"账号已保存到本地: {email}")
+                    break  # 成功，跳出重试循环
+                else:
+                    # 注册失败，删除可能存在的临时文件
+                    delete_local_file(email)
+                    log(f"注册失败，继续重试...", "WARN")
+            except Exception as e:
+                log(f"异常: {e}", "ERR")
                 delete_local_file(email)
-                log(f"[Worker-{worker_id}] ✗ 注册失败，重试...", "WARN")
-                
-        except Exception as e:
-            log(f"[Worker-{worker_id}] 异常: {e}", "ERR")
-            if driver:
                 try:
                     driver.quit()
                 except:
                     pass
-                driver = None
-        
-        try:
-            if driver:
-                driver.delete_all_cookies()
-        except:
-            pass
-        
-        time.sleep(random.randint(2, 4))
-    
-    if driver:
-        try:
-            driver.quit()
-        except:
-            pass
-    
-    log(f"[Worker-{worker_id}] 工作完成")
+                driver = create_chrome_driver()
+                log(f"发生异常，继续重试...", "WARN")
 
+            print(f"\n进度: 成功 {success}/{TOTAL_ACCOUNTS} | 总尝试 {total_attempts}")
 
-def main():
-    global success_count
-    success_count = 0
-    
-    workers = min(PARALLEL_WORKERS, TOTAL_ACCOUNTS)
-    
-    print(f"\n{'='*50}")
-    print(f"Gemini Business 批量注册 - 目标 {TOTAL_ACCOUNTS} 个")
-    print(f"模式: 并行注册 ({workers} 个线程)")
-    print(f"输出目录: {OUTPUT_DIR}")
-    print(f"{'='*50}\n")
-
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(register_worker, i+1) for i in range(workers)]
-        for future in as_completed(futures):
             try:
-                future.result()
-            except Exception as e:
-                log(f"线程异常: {e}", "ERR")
+                driver.delete_all_cookies()
+            except:
+                pass
+            time.sleep(random.randint(5, 10))
+
+        # 成功后准备下一个
+        print(f"\n进度: 成功 {success}/{TOTAL_ACCOUNTS} | 总尝试 {total_attempts}")
+        if success < TOTAL_ACCOUNTS:
+            try:
+                driver.delete_all_cookies()
+            except:
+                pass
+            time.sleep(random.randint(5, 10))
+
+    try:
+        driver.quit()
+    except:
+        pass
 
     print(f"\n{'='*50}")
-    print(f"完成! 成功: {success_count}/{TOTAL_ACCOUNTS}")
+    print(f"完成! 成功: {success}/{TOTAL_ACCOUNTS}, 总尝试: {total_attempts}")
     print(f"账号保存位置: {OUTPUT_DIR}")
     print(f"{'='*50}")
 
