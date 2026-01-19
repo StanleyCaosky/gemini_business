@@ -1,23 +1,40 @@
 FROM python:3.11-slim
+
 WORKDIR /app
-COPY requirements.txt .
+
+# 安装系统依赖和 Chrome
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    && pip install --no-cache-dir -r requirements.txt \
+    wget \
+    gnupg \
+    unzip \
+    curl \
+    && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
     && apt-get purge -y gcc \
     && apt-get autoremove -y \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# 安装 Python 依赖
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制项目文件
 COPY main.py .
-# 复制 core 模块
 COPY core ./core
-# 复制 util 目录
 COPY util ./util
-# 复制 templates 目录
 COPY templates ./templates
-# 复制 static 目录
 COPY static ./static
+COPY script ./script
+
 # 创建数据目录
-RUN mkdir -p ./data/images
-# 声明数据卷（运行时需要 -v 挂载才能持久化）
+RUN mkdir -p ./data/images ./data/accounts
+
+# 声明数据卷
 VOLUME ["/app/data"]
+
+# 默认启动 API 服务
 CMD ["python", "-u", "main.py"]

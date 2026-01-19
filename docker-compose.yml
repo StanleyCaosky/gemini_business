@@ -1,4 +1,5 @@
 services:
+  # API 服务
   gemini-api:
     build: .
     ports:
@@ -8,3 +9,43 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    profiles:
+      - all
+
+  # 账号注册服务
+  register:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      # 注册数量
+      - TOTAL_ACCOUNTS=1
+      # 邮箱 API 配置
+      - MAIL_API=https://mail.chatgpt.org.uk
+      - MAIL_KEY=gpt-test
+      # 输出目录（容器内路径）
+      - OUTPUT_DIR=/app/data/accounts
+    command: ["python", "-u", "script/register_accounts.py"]
+    profiles:
+      - register
+
+  # 账号守护服务（自动维护账号数量）
+  keeper:
+    build: .
+    volumes:
+      - ./data:/app/data
+    environment:
+      # 最少保持账号数
+      - MIN_ACCOUNTS=5
+      # 检测间隔（秒）
+      - CHECK_INTERVAL=3600
+      # 账号目录
+      - ACCOUNTS_DIR=/app/data/accounts
+      # 邮箱 API 配置（用于注册新账号）
+      - MAIL_API=https://mail.chatgpt.org.uk
+      - MAIL_KEY=gpt-test
+    command: ["python", "-u", "script/account_keeper.py"]
+    restart: unless-stopped
+    profiles:
+      - keeper
+      - all
