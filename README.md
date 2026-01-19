@@ -4,7 +4,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-repo/gemini-business2api.git
+git clone https://github.com/Li112233ning/gemini_business.git
 cd gemini-business2api
 
 # 创建环境配置

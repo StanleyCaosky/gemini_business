@@ -18,7 +18,9 @@ Gemini Business 账号批量注册脚本
     TOTAL_ACCOUNTS=5 python register_accounts.py
 """
 
-import undetected_chromedriver as uc
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -28,6 +30,9 @@ from urllib.parse import urlparse, parse_qs
 from datetime import datetime
 import time, random, json, os, sys
 import requests
+
+# Docker 环境检测
+IS_DOCKER = os.path.exists('/.dockerenv') or os.environ.get('DOCKER_CONTAINER', False)
 
 # 添加项目根目录到路径
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -58,7 +63,7 @@ def log(msg, level="INFO"):
 
 def create_chrome_driver():
     """创建 Chrome 驱动 (Docker 兼容)"""
-    options = uc.ChromeOptions()
+    options = Options()
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
@@ -67,10 +72,12 @@ def create_chrome_driver():
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--disable-extensions')
     options.add_argument('--disable-infobars')
-    options.add_argument('--remote-debugging-port=9222')
-    options.add_argument('--single-process')
-    options.binary_location = '/usr/bin/google-chrome'
-    return uc.Chrome(options=options, use_subprocess=False, headless=True)
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    
+    if IS_DOCKER:
+        options.binary_location = '/usr/bin/google-chrome'
+    
+    return webdriver.Chrome(options=options)
 
 
 def create_email():

@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# 设置 Docker 环境变量
+ENV DOCKER_CONTAINER=true
+
 # 安装系统依赖和 Chrome
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
