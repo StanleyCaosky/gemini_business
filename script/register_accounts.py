@@ -43,7 +43,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # ========== 配置 (支持环境变量) ==========
 TOTAL_ACCOUNTS = int(os.environ.get("TOTAL_ACCOUNTS", 1))
-PARALLEL_WORKERS = int(os.environ.get("PARALLEL_WORKERS", 3))  # 并行数
+PARALLEL_WORKERS = int(os.environ.get("PARALLEL_WORKERS", 1))  # 并行数（默认单线程）
 MAIL_API = os.environ.get("MAIL_API", "https://mail.chatgpt.org.uk")
 MAIL_KEY = os.environ.get("MAIL_KEY", "gpt-test")
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "data", "accounts"))
