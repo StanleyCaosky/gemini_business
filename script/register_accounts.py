@@ -9,8 +9,8 @@ Gemini Business 账号批量注册脚本
 
 配置（环境变量）：
 - TOTAL_ACCOUNTS: 注册账号数量（默认 1）
-- MAIL_API: 临时邮箱 API 地址
-- MAIL_KEY: 临时邮箱 API 密钥
+- MAIL_BASE_URL: 临时邮箱 API 地址（默认 https://mail.td）
+- MAIL_DOMAIN: 临时邮箱域名（默认 nqmo.com）
 - OUTPUT_DIR: 输出目录（默认 data/accounts）
 
 使用方式：
@@ -28,7 +28,7 @@ from selenium.webdriver.common.keys import Keys
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime
-import time, random, json, os, sys
+import time, random, json, os, sys, re
 import requests
 
 # Docker 环境检测
@@ -41,8 +41,8 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # ========== 配置 (支持环境变量) ==========
 TOTAL_ACCOUNTS = int(os.environ.get("TOTAL_ACCOUNTS", 1))
-MAIL_API = os.environ.get("MAIL_API", "https://mail.chatgpt.org.uk")
-MAIL_KEY = os.environ.get("MAIL_KEY", "gpt-test")
+MAIL_BASE_URL = os.environ.get("MAIL_BASE_URL", "https://mail.td")
+MAIL_DOMAIN = os.environ.get("MAIL_DOMAIN", "nqmo.com")
 ACCOUNTS_FILE = os.environ.get("ACCOUNTS_FILE", os.path.join(PROJECT_ROOT, "data", "accounts.json"))
 LOGIN_URL = "https://auth.business.gemini.google/login?continueUrl=https:%2F%2Fbusiness.gemini.google%2F&wiffid=CAoSJDIwNTlhYzBjLTVlMmMtNGUxZC1hY2JkLThmOGY2ZDE0ODM1Mg"
 
@@ -80,19 +80,95 @@ def create_chrome_driver():
     return webdriver.Chrome(options=options)
 
 
+def get_auth_token(email):
+    """获取 mail.td 的 auth_token"""
+    try:
+        response = requests.get(
+            f"{MAIL_BASE_URL}/zh/mail/{email}",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=30,
+        )
+        cookies = response.headers.get("set-cookie", "")
+        match = re.search(r"auth_token=([^;]+)", cookies)
+        if match:
+            return match.group(1)
+        log("未获取到 auth_token", "ERR")
+    except Exception as e:
+        log(f"获取 auth_token 异常: {e}", "ERR")
+    return None
+
+
 def create_email():
     """创建临时邮箱"""
+    random_email = f"{int(time.time() * 1000)}{random.randint(1000, 9999)}@{MAIL_DOMAIN}"
+    url = (
+        f"{MAIL_BASE_URL}/_next/data/Vo6ilNCStMVNBJtfMWiXR/zh/mail/"
+        f"{random_email}.json?name={random_email}"
+    )
     try:
-        r = requests.get(f"{MAIL_API}/api/generate-email",
-            headers={"X-API-Key": MAIL_KEY}, timeout=30)
-        if r.status_code == 200 and r.json().get('success'):
-            email = r.json()['data']['email']
-            log(f"邮箱创建: {email}")
-            return email
-        else:
-            log(f"邮箱API返回: {r.status_code} - {r.text[:200]}", "ERR")
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+        if r.status_code == 200 and r.json().get("__N_SSP"):
+            log(f"邮箱创建: {random_email}")
+            return random_email
+        log(f"邮箱API返回: {r.status_code} - {r.text[:200]}", "ERR")
     except Exception as e:
         log(f"创建邮箱异常: {e}", "ERR")
+    return None
+
+
+def _extract_messages(payload):
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for key in ("messages", "mails", "emails", "items"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+        data = payload.get("data")
+        if isinstance(data, dict):
+            for key in ("messages", "mails", "emails", "items"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    return value
+    return []
+
+
+def _extract_message_id(message):
+    for key in ("id", "_id", "mail_id", "message_id"):
+        value = message.get(key)
+        if value:
+            return value
+    return None
+
+
+def _extract_message_content(payload):
+    if isinstance(payload, dict):
+        for key in ("html", "html_content", "content", "text", "body"):
+            value = payload.get(key)
+            if value:
+                return value
+        data = payload.get("data")
+        if isinstance(data, dict):
+            for key in ("html", "html_content", "content", "text", "body"):
+                value = data.get(key)
+                if value:
+                    return value
+    return ""
+
+
+def _parse_verification_code(content):
+    if not content:
+        return None
+    soup = BeautifulSoup(content, "html.parser")
+    span = soup.find("span", class_="verification-code")
+    if span:
+        code = span.get_text().strip()
+        if len(code) == 6 and code.isdigit():
+            return code
+    text = soup.get_text(" ", strip=True)
+    match = re.search(r"\b(\d{6})\b", text)
+    if match:
+        return match.group(1)
     return None
 
 
@@ -100,24 +176,42 @@ def get_code(email, timeout=30):
     """获取验证码"""
     log(f"等待验证码 (最多{timeout}s)...")
     start = time.time()
+    token = None
     while time.time() - start < timeout:
         try:
-            r = requests.get(f"{MAIL_API}/api/emails", params={"email": email},
-                headers={"X-API-Key": MAIL_KEY}, timeout=30)
+            if not token:
+                token = get_auth_token(email)
+                if not token:
+                    time.sleep(2)
+                    continue
+            mailbox_url = f"{MAIL_BASE_URL}/api/api/v1/mailbox/{email}"
+            r = requests.get(
+                mailbox_url,
+                headers={"Authorization": f"bearer {token}"},
+                timeout=30,
+            )
             if r.status_code == 200:
-                emails = r.json().get('data', {}).get('emails', [])
-                if emails:
-                    html = emails[0].get('html_content') or emails[0].get('content', '')
-                    soup = BeautifulSoup(html, 'html.parser')
-                    span = soup.find('span', class_='verification-code')
-                    if span:
-                        code = span.get_text().strip()
-                        if len(code) == 6:
-                            log(f"验证码: {code}")
-                            return code
-        except:
+                messages = _extract_messages(r.json())
+                for message in messages:
+                    message_id = _extract_message_id(message)
+                    if not message_id:
+                        continue
+                    content_url = f"{MAIL_BASE_URL}/api/api/v1/mailbox/{email}/{message_id}"
+                    detail = requests.get(
+                        content_url,
+                        headers={"Authorization": f"bearer {token}"},
+                        timeout=30,
+                    )
+                    if detail.status_code != 200:
+                        continue
+                    content = _extract_message_content(detail.json())
+                    code = _parse_verification_code(content)
+                    if code:
+                        log(f"验证码: {code}")
+                        return code
+        except Exception:
             pass
-        print(f"  等待中... ({int(time.time()-start)}s)", end='\r')
+        print(f"  等待中... ({int(time.time()-start)}s)", end="\r")
         time.sleep(2)
     log("验证码超时", "ERR")
     return None
