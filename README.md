@@ -1,43 +1,70 @@
-# Docker 部署指南
+# Docker 部署指南（保姆级）
 
-## 快速开始
+> 下面从“拉取镜像”开始，一步一步带你跑起来。
+
+## 1. 准备环境
+
+1) **安装 Docker 与 Docker Compose 插件**
+   - Windows/Mac：安装 Docker Desktop（自带 compose）。
+   - Linux：安装 Docker Engine + Docker Compose 插件。
+
+2) **确认安装成功**
+
+```bash
+docker --version
+docker compose version
+```
+
+## 2. 获取项目代码
 
 ```bash
 # 克隆项目
 git clone https://github.com/Li112233ning/gemini_business.git
-cd gemini-business2api
-
-# 创建环境配置
-cp .env.example .env
-# 编辑 .env 设置 ADMIN_KEY
-
-# 构建并启动
-docker-compose up -d gemini-api
+cd gemini_business
 ```
+
+## 3. 拉取镜像 / 构建镜像
+
+> 本项目镜像通过 Dockerfile 构建，执行 `build` 会自动拉取基础镜像。
+
+```bash
+# 拉取基础镜像（会下载 Dockerfile 里依赖的基础镜像）
+docker compose pull
+
+# 构建项目镜像
+docker compose build
+```
+
+## 4. 配置环境变量
+
+```bash
+# 复制配置模板
+cp .env.example .env
+
+# 编辑 .env，至少设置 ADMIN_KEY
+# ADMIN_KEY=你的管理员密钥
+```
+
+## 5. 启动 API 服务
+
+```bash
+# 启动 API
+docker compose up -d gemini-api
+
+# 查看日志
+docker compose logs -f gemini-api
+```
+
+访问管理面板：`http://localhost:7860`
 
 ## 服务说明
 
 | 服务 | 说明 | 启动命令 |
 |------|------|----------|
-| `gemini-api` | API 主服务 | `docker-compose up -d gemini-api` |
-| `register` | 账号注册 | `docker-compose --profile register run register` |
-| `keeper` | 账号守护 | `docker-compose --profile keeper up -d keeper` |
-| **一键启动** | API + 守护 | `docker-compose --profile all up -d` |
-
-## API 服务
-
-```bash
-# 启动 API 服务
-docker-compose up -d gemini-api
-
-# 查看日志
-docker-compose logs -f gemini-api
-
-# 停止服务
-docker-compose down
-```
-
-访问管理面板：`http://localhost:7860`
+| `gemini-api` | API 主服务 | `docker compose up -d gemini-api` |
+| `register` | 账号注册 | `docker compose --profile register run register` |
+| `keeper` | 账号守护 | `docker compose --profile keeper up -d keeper` |
+| **一键启动** | API + 守护 | `docker compose --profile all up -d` |
 
 ## 账号注册
 
@@ -45,10 +72,10 @@ docker-compose down
 
 ```bash
 # 注册 1 个账号（默认）
-docker-compose --profile register run register
+docker compose --profile register run register
 
 # 注册 10 个账号
-docker-compose --profile register run -e TOTAL_ACCOUNTS=10 register
+docker compose --profile register run -e TOTAL_ACCOUNTS=10 register
 ```
 
 ### 配置项
@@ -58,8 +85,8 @@ docker-compose --profile register run -e TOTAL_ACCOUNTS=10 register
 ```yaml
 environment:
   - TOTAL_ACCOUNTS=1           # 注册数量
-  - MAIL_API=https://...       # 邮箱 API 地址
-  - MAIL_KEY=your-key          # 邮箱 API 密钥
+  - MAIL_BASE_URL=https://mail.td  # 临时邮箱 API 地址
+  - MAIL_DOMAIN=nqmo.com           # 临时邮箱域名
 ```
 
 ## 账号守护
@@ -68,13 +95,13 @@ environment:
 
 ```bash
 # 启动守护服务
-docker-compose --profile keeper up -d keeper
+docker compose --profile keeper up -d keeper
 
 # 查看日志
-docker-compose logs -f keeper
+docker compose logs -f keeper
 
 # 停止守护服务
-docker-compose --profile keeper down
+docker compose --profile keeper down
 ```
 
 ### 配置项
@@ -85,8 +112,8 @@ docker-compose --profile keeper down
 environment:
   - MIN_ACCOUNTS=5       # 最少保持账号数
   - CHECK_INTERVAL=3600  # 检测间隔（秒）
-  - MAIL_API=https://... # 邮箱 API 地址
-  - MAIL_KEY=your-key    # 邮箱 API 密钥
+  - MAIL_BASE_URL=https://mail.td  # 临时邮箱 API 地址
+  - MAIL_DOMAIN=nqmo.com           # 临时邮箱域名
 ```
 
 ### 守护逻辑
@@ -100,19 +127,19 @@ environment:
 同时启动 API 服务和账号守护：
 
 ```bash
-docker-compose --profile all up -d
+docker compose --profile all up -d
 ```
 
 查看所有服务状态：
 
 ```bash
-docker-compose --profile all ps
+docker compose --profile all ps
 ```
 
 停止所有服务：
 
 ```bash
-docker-compose --profile all down
+docker compose --profile all down
 ```
 
 ## 配置说明
