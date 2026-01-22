@@ -20,9 +20,9 @@ services:
     environment:
       # 注册数量
       - TOTAL_ACCOUNTS=1
-      # 邮箱 API 配置
-      - MAIL_API=https://mail.chatgpt.org.uk
-      - MAIL_KEY=gpt-test
+      # 临时邮箱配置
+      - MAIL_BASE_URL=https://email-worker.2668812066.workers.dev
+      - MAIL_DOMAIN=220901.xyz
       # 账号文件（容器内路径）
       - ACCOUNTS_FILE=/app/data/accounts.json
     command: ["python", "-u", "script/register_accounts.py"]
@@ -41,9 +41,9 @@ services:
       - CHECK_INTERVAL=3600
       # 账号文件
       - ACCOUNTS_FILE=/app/data/accounts.json
-      # 邮箱 API 配置（用于注册新账号）
-      - MAIL_API=https://mail.chatgpt.org.uk
-      - MAIL_KEY=gpt-test
+      # 临时邮箱配置（用于注册新账号）
+      - MAIL_BASE_URL=https://email-worker.2668812066.workers.dev
+      - MAIL_DOMAIN=220901.xyz
     command: ["python", "-u", "script/account_keeper.py"]
     restart: unless-stopped
     profiles:
